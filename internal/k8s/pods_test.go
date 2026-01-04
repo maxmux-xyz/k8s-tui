@@ -55,7 +55,7 @@ func TestClient_ListPods(t *testing.T) {
 		createTestPod("pod-gamma", "kube-system", corev1.PodRunning, true),
 	}
 
-	fakeClient := fake.NewSimpleClientset(pods...)
+	fakeClient := fake.NewClientset(pods...)
 
 	client := &Client{
 		clientset:        fakeClient,
@@ -95,7 +95,7 @@ func TestClient_ListPods_UsesCurrentNamespace(t *testing.T) {
 		createTestPod("pod-1", "my-namespace", corev1.PodRunning, true),
 	}
 
-	fakeClient := fake.NewSimpleClientset(pods...)
+	fakeClient := fake.NewClientset(pods...)
 
 	client := &Client{
 		clientset:        fakeClient,
@@ -120,7 +120,7 @@ func TestClient_GetPod(t *testing.T) {
 		createTestPod("my-pod", "default", corev1.PodRunning, true),
 	}
 
-	fakeClient := fake.NewSimpleClientset(pods...)
+	fakeClient := fake.NewClientset(pods...)
 
 	client := &Client{
 		clientset:        fakeClient,
@@ -146,7 +146,7 @@ func TestClient_GetPod(t *testing.T) {
 }
 
 func TestClient_GetPod_NotFound(t *testing.T) {
-	fakeClient := fake.NewSimpleClientset()
+	fakeClient := fake.NewClientset()
 
 	client := &Client{
 		clientset:        fakeClient,
@@ -164,7 +164,7 @@ func TestClient_GetPod_NotFound(t *testing.T) {
 func TestPodStatus_Running(t *testing.T) {
 	pod := createTestPod("test", "default", corev1.PodRunning, true)
 
-	status, _ := determinePodStatus(*pod)
+	status, _ := determinePodStatus(pod)
 	if status != PodStatusRunning {
 		t.Errorf("expected Running status, got %q", status)
 	}
@@ -173,7 +173,7 @@ func TestPodStatus_Running(t *testing.T) {
 func TestPodStatus_Pending(t *testing.T) {
 	pod := createTestPod("test", "default", corev1.PodPending, false)
 
-	status, _ := determinePodStatus(*pod)
+	status, _ := determinePodStatus(pod)
 	if status != PodStatusPending {
 		t.Errorf("expected Pending status, got %q", status)
 	}
@@ -182,7 +182,7 @@ func TestPodStatus_Pending(t *testing.T) {
 func TestPodStatus_Failed(t *testing.T) {
 	pod := createTestPod("test", "default", corev1.PodFailed, false)
 
-	status, _ := determinePodStatus(*pod)
+	status, _ := determinePodStatus(pod)
 	if status != PodStatusFailed {
 		t.Errorf("expected Failed status, got %q", status)
 	}
@@ -191,7 +191,7 @@ func TestPodStatus_Failed(t *testing.T) {
 func TestPodStatus_Succeeded(t *testing.T) {
 	pod := createTestPod("test", "default", corev1.PodSucceeded, false)
 
-	status, _ := determinePodStatus(*pod)
+	status, _ := determinePodStatus(pod)
 	if status != PodStatusSucceeded {
 		t.Errorf("expected Succeeded status, got %q", status)
 	}
@@ -202,7 +202,7 @@ func TestPodStatus_Terminating(t *testing.T) {
 	pod := createTestPod("test", "default", corev1.PodRunning, true)
 	pod.DeletionTimestamp = &metav1.Time{Time: now}
 
-	status, _ := determinePodStatus(*pod)
+	status, _ := determinePodStatus(pod)
 	if status != PodStatusTerminating {
 		t.Errorf("expected Terminating status, got %q", status)
 	}
@@ -234,7 +234,7 @@ func TestPodInfo_ReadyCount(t *testing.T) {
 	}
 
 	client := &Client{}
-	info := client.podToInfo(*pod)
+	info := client.podToInfo(pod)
 
 	if info.Ready != "2/3" {
 		t.Errorf("expected ready '2/3', got %q", info.Ready)
@@ -271,7 +271,7 @@ func TestPodInfo_Restarts(t *testing.T) {
 	}
 
 	client := &Client{}
-	info := client.podToInfo(*pod)
+	info := client.podToInfo(pod)
 
 	if info.Restarts != 8 {
 		t.Errorf("expected total restarts 8, got %d", info.Restarts)

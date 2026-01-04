@@ -4,47 +4,64 @@ run:
   timeout: 5m
 
 linters:
-  # Start with default linters only for initial setup
-  # TODO: Enable stricter linting after fixing existing issues
-  # See docs/plans for lint-fix plan
   default: standard
   enable:
-    # Security
-    - gosec          # Security issues
-
-    # Style
-    - misspell       # Spelling mistakes
+    - gosec
+    - misspell
+    - gocritic
+    - revive
+    - prealloc
+    - unconvert
+    - nolintlint
 
   settings:
     errcheck:
-      # Disable checking in defer statements for now
-      exclude-functions:
-        - io.Closer.Close
-        - (io.Closer).Close
+      check-type-assertions: true
+      check-blank: true
+
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+      disabled-checks:
+        # Bubble Tea framework requires value receivers for Update/View/Init methods
+        # Kubernetes types are also large by design
+        - hugeParam
+        # Don't enforce named results for all functions
+        - unnamedResult
+        # Allow single case switches for type assertions
+        - singleCaseSwitch
+
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: error-return
+        - name: error-strings
+        - name: exported
+        - name: increment-decrement
+        - name: var-declaration
+        - name: package-comments
+          disabled: true  # Keep disabled for small project
 
     gosec:
       excludes:
-        - G104  # Audit errors not checked (covered by errcheck)
-
-    staticcheck:
-      checks:
-        - "all"
-        - "-SA1019"  # Temporarily ignore deprecation warnings
-        - "-ST1000"  # Package comments - enable later
-        - "-ST1020"  # Exported comment form - enable later
+        - G104
 
   exclusions:
     rules:
-      # Test files - relax some rules
       - path: _test\.go
         linters:
           - gosec
           - errcheck
+          - gocritic
 
 formatters:
   enable:
-    - gofmt          # Formatting check
-    - goimports      # Import ordering
+    - gofmt
+    - goimports
 
 output:
   show-stats: true

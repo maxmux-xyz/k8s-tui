@@ -3,6 +3,7 @@ package model
 // ViewState represents the current view/screen of the application
 type ViewState int
 
+// View state constants for application navigation.
 const (
 	ViewPodList           ViewState = iota // Main pod list view
 	ViewLogs                               // Log streaming view

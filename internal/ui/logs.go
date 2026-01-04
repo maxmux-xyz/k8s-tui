@@ -11,6 +11,7 @@ import (
 // LogViewState represents the state of the log streaming
 type LogViewState int
 
+// Log view state constants for tracking streaming status.
 const (
 	LogViewStateIdle LogViewState = iota
 	LogViewStateStreaming
@@ -277,16 +278,12 @@ func (m LogViewModel) buildStatusLine() string {
 // ScrollUp scrolls the viewport up
 func (m *LogViewModel) ScrollUp(lines int) {
 	m.follow = false
-	for i := 0; i < lines; i++ {
-		m.viewport.LineUp(1)
-	}
+	m.viewport.ScrollUp(lines)
 }
 
 // ScrollDown scrolls the viewport down
 func (m *LogViewModel) ScrollDown(lines int) {
-	for i := 0; i < lines; i++ {
-		m.viewport.LineDown(1)
-	}
+	m.viewport.ScrollDown(lines)
 	if m.viewport.AtBottom() {
 		m.follow = true
 	}
@@ -295,12 +292,12 @@ func (m *LogViewModel) ScrollDown(lines int) {
 // PageUp scrolls the viewport up one page
 func (m *LogViewModel) PageUp() {
 	m.follow = false
-	m.viewport.ViewUp()
+	m.viewport.PageUp()
 }
 
 // PageDown scrolls the viewport down one page
 func (m *LogViewModel) PageDown() {
-	m.viewport.ViewDown()
+	m.viewport.PageDown()
 	if m.viewport.AtBottom() {
 		m.follow = true
 	}
@@ -316,11 +313,4 @@ func (m *LogViewModel) GotoTop() {
 func (m *LogViewModel) GotoBottom() {
 	m.follow = true
 	m.viewport.GotoBottom()
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

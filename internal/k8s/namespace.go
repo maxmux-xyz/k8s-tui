@@ -33,7 +33,8 @@ func (c *Client) namespacesToInfo(namespaces []corev1.Namespace) []NamespaceInfo
 	now := time.Now()
 	result := make([]NamespaceInfo, 0, len(namespaces))
 
-	for _, ns := range namespaces {
+	for i := range namespaces {
+		ns := &namespaces[i]
 		age := now.Sub(ns.CreationTimestamp.Time)
 
 		result = append(result, NamespaceInfo{
@@ -71,6 +72,7 @@ func isNotFoundError(err error) bool {
 		return false
 	}
 	// Check for the standard Kubernetes not found status
-	return err.Error() == "not found" ||
-		(len(err.Error()) > 0 && err.Error()[0:9] == "namespace")
+	errStr := err.Error()
+	return errStr == "not found" ||
+		(len(errStr) >= 9 && errStr[0:9] == "namespace")
 }

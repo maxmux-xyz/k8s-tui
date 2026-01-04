@@ -10,16 +10,9 @@ func TestNewClient_NoKubeconfig(t *testing.T) {
 	// Create a temp dir with no kubeconfig
 	tmpDir := t.TempDir()
 
-	// Override HOME to use temp dir
-	originalHome := os.Getenv("HOME")
-	originalKubeconfig := os.Getenv("KUBECONFIG")
-	t.Cleanup(func() {
-		os.Setenv("HOME", originalHome)
-		os.Setenv("KUBECONFIG", originalKubeconfig)
-	})
-
-	os.Setenv("HOME", tmpDir)
-	os.Unsetenv("KUBECONFIG")
+	// Override HOME to use temp dir - t.Setenv automatically restores on cleanup
+	t.Setenv("HOME", tmpDir)
+	t.Setenv("KUBECONFIG", "")
 
 	_, err := NewClient()
 	if err == nil {
@@ -59,7 +52,7 @@ users:
   user:
     token: test-token
 `
-	if err := os.WriteFile(kubeconfigPath, []byte(kubeconfig), 0600); err != nil {
+	if err := os.WriteFile(kubeconfigPath, []byte(kubeconfig), 0o600); err != nil {
 		t.Fatalf("failed to write test kubeconfig: %v", err)
 	}
 
@@ -113,7 +106,7 @@ users:
   user:
     token: token-2
 `
-	if err := os.WriteFile(kubeconfigPath, []byte(kubeconfig), 0600); err != nil {
+	if err := os.WriteFile(kubeconfigPath, []byte(kubeconfig), 0o600); err != nil {
 		t.Fatalf("failed to write test kubeconfig: %v", err)
 	}
 
@@ -154,7 +147,7 @@ users:
   user:
     token: test-token
 `
-	if err := os.WriteFile(kubeconfigPath, []byte(kubeconfig), 0600); err != nil {
+	if err := os.WriteFile(kubeconfigPath, []byte(kubeconfig), 0o600); err != nil {
 		t.Fatalf("failed to write test kubeconfig: %v", err)
 	}
 
@@ -194,7 +187,7 @@ users:
   user:
     token: test-token
 `
-	if err := os.WriteFile(kubeconfigPath, []byte(kubeconfig), 0600); err != nil {
+	if err := os.WriteFile(kubeconfigPath, []byte(kubeconfig), 0o600); err != nil {
 		t.Fatalf("failed to write test kubeconfig: %v", err)
 	}
 
@@ -231,7 +224,7 @@ users:
   user:
     token: test-token
 `
-	if err := os.WriteFile(kubeconfigPath, []byte(kubeconfig), 0600); err != nil {
+	if err := os.WriteFile(kubeconfigPath, []byte(kubeconfig), 0o600); err != nil {
 		t.Fatalf("failed to write test kubeconfig: %v", err)
 	}
 
@@ -270,7 +263,7 @@ users:
   user:
     token: test-token
 `
-	if err := os.WriteFile(kubeconfigPath, []byte(kubeconfig), 0600); err != nil {
+	if err := os.WriteFile(kubeconfigPath, []byte(kubeconfig), 0o600); err != nil {
 		t.Fatalf("failed to write test kubeconfig: %v", err)
 	}
 

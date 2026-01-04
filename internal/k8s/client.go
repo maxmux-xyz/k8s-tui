@@ -1,3 +1,5 @@
+// Package k8s provides Kubernetes client operations including pod management,
+// log streaming, namespace and context switching.
 package k8s
 
 import (

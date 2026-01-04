@@ -14,8 +14,8 @@ import (
 func createTestPodWithContainers(name, namespace string, containers []string) *corev1.Pod {
 	now := time.Now()
 
-	var containerSpecs []corev1.Container
-	var containerStatuses []corev1.ContainerStatus
+	containerSpecs := make([]corev1.Container, 0, len(containers))
+	containerStatuses := make([]corev1.ContainerStatus, 0, len(containers))
 
 	for _, c := range containers {
 		containerSpecs = append(containerSpecs, corev1.Container{Name: c})
@@ -49,7 +49,7 @@ func TestClient_GetContainers(t *testing.T) {
 		createTestPodWithContainers("multi-container-pod", "default", []string{"app", "sidecar", "init"}),
 	}
 
-	fakeClient := fake.NewSimpleClientset(pods...)
+	fakeClient := fake.NewClientset(pods...)
 
 	client := &Client{
 		clientset:        fakeClient,
@@ -81,7 +81,7 @@ func TestClient_GetContainers_SingleContainer(t *testing.T) {
 		createTestPodWithContainers("single-container-pod", "default", []string{"main"}),
 	}
 
-	fakeClient := fake.NewSimpleClientset(pods...)
+	fakeClient := fake.NewClientset(pods...)
 
 	client := &Client{
 		clientset:        fakeClient,
@@ -109,7 +109,7 @@ func TestClient_GetContainers_UsesCurrentNamespace(t *testing.T) {
 		createTestPodWithContainers("my-pod", "my-namespace", []string{"app"}),
 	}
 
-	fakeClient := fake.NewSimpleClientset(pods...)
+	fakeClient := fake.NewClientset(pods...)
 
 	client := &Client{
 		clientset:        fakeClient,
@@ -130,7 +130,7 @@ func TestClient_GetContainers_UsesCurrentNamespace(t *testing.T) {
 }
 
 func TestClient_GetContainers_PodNotFound(t *testing.T) {
-	fakeClient := fake.NewSimpleClientset()
+	fakeClient := fake.NewClientset()
 
 	client := &Client{
 		clientset:        fakeClient,
@@ -150,7 +150,7 @@ func TestClient_GetFirstContainer(t *testing.T) {
 		createTestPodWithContainers("my-pod", "default", []string{"first", "second"}),
 	}
 
-	fakeClient := fake.NewSimpleClientset(pods...)
+	fakeClient := fake.NewClientset(pods...)
 
 	client := &Client{
 		clientset:        fakeClient,
@@ -170,7 +170,7 @@ func TestClient_GetFirstContainer(t *testing.T) {
 }
 
 func TestClient_GetFirstContainer_PodNotFound(t *testing.T) {
-	fakeClient := fake.NewSimpleClientset()
+	fakeClient := fake.NewClientset()
 
 	client := &Client{
 		clientset:        fakeClient,

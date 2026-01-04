@@ -38,7 +38,7 @@ func TestClient_ListNamespaces(t *testing.T) {
 		},
 	}
 
-	fakeClient := fake.NewSimpleClientset(namespaces...)
+	fakeClient := fake.NewClientset(namespaces...)
 
 	client := &Client{
 		clientset:        fakeClient,
@@ -92,7 +92,7 @@ func TestClient_ListNamespaces(t *testing.T) {
 }
 
 func TestClient_ListNamespaces_Empty(t *testing.T) {
-	fakeClient := fake.NewSimpleClientset()
+	fakeClient := fake.NewClientset()
 
 	client := &Client{
 		clientset:        fakeClient,
@@ -117,7 +117,7 @@ func TestClient_NamespaceExists(t *testing.T) {
 		},
 	}
 
-	fakeClient := fake.NewSimpleClientset(namespaces...)
+	fakeClient := fake.NewClientset(namespaces...)
 
 	client := &Client{
 		clientset: fakeClient,

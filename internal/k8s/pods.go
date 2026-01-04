@@ -13,6 +13,7 @@ import (
 // PodStatus represents the high-level status of a pod
 type PodStatus string
 
+// Pod status constants represent the high-level status of a pod.
 const (
 	PodStatusRunning     PodStatus = "Running"
 	PodStatusPending     PodStatus = "Pending"
@@ -72,7 +73,7 @@ func (c *Client) GetPod(ctx context.Context, namespace, name string) (*PodInfo, 
 		return nil, fmt.Errorf("failed to get pod %q in namespace %q: %w", name, namespace, err)
 	}
 
-	info := c.podToInfo(*pod)
+	info := c.podToInfo(pod)
 	return &info, nil
 }
 
@@ -80,8 +81,8 @@ func (c *Client) GetPod(ctx context.Context, namespace, name string) (*PodInfo, 
 func (c *Client) podsToInfo(pods []corev1.Pod) []PodInfo {
 	result := make([]PodInfo, 0, len(pods))
 
-	for _, pod := range pods {
-		result = append(result, c.podToInfo(pod))
+	for i := range pods {
+		result = append(result, c.podToInfo(&pods[i]))
 	}
 
 	// Sort by name
@@ -93,7 +94,7 @@ func (c *Client) podsToInfo(pods []corev1.Pod) []PodInfo {
 }
 
 // podToInfo converts a single pod to PodInfo
-func (c *Client) podToInfo(pod corev1.Pod) PodInfo {
+func (c *Client) podToInfo(pod *corev1.Pod) PodInfo {
 	now := time.Now()
 	age := now.Sub(pod.CreationTimestamp.Time)
 
@@ -120,18 +121,19 @@ func (c *Client) podToInfo(pod corev1.Pod) PodInfo {
 }
 
 // parseContainerStatuses extracts container status info from a pod
-func parseContainerStatuses(pod corev1.Pod) ([]ContainerStatus, int, int32) {
-	var containers []ContainerStatus
+func parseContainerStatuses(pod *corev1.Pod) ([]ContainerStatus, int, int32) {
+	containers := make([]ContainerStatus, 0, len(pod.Spec.Containers))
 	var readyCount int
 	var totalRestarts int32
 
 	// Map of container names to their spec (for init containers vs regular containers)
 	containerNames := make(map[string]bool)
-	for _, c := range pod.Spec.Containers {
-		containerNames[c.Name] = true
+	for i := range pod.Spec.Containers {
+		containerNames[pod.Spec.Containers[i].Name] = true
 	}
 
-	for _, cs := range pod.Status.ContainerStatuses {
+	for i := range pod.Status.ContainerStatuses {
+		cs := &pod.Status.ContainerStatuses[i]
 		state, reason := parseContainerState(cs.State)
 
 		containers = append(containers, ContainerStatus{
@@ -150,9 +152,9 @@ func parseContainerStatuses(pod corev1.Pod) ([]ContainerStatus, int, int32) {
 
 	// If no status yet, create entries from spec
 	if len(containers) == 0 {
-		for _, c := range pod.Spec.Containers {
+		for i := range pod.Spec.Containers {
 			containers = append(containers, ContainerStatus{
-				Name:  c.Name,
+				Name:  pod.Spec.Containers[i].Name,
 				Ready: false,
 				State: "Waiting",
 			})
@@ -177,7 +179,7 @@ func parseContainerState(state corev1.ContainerState) (string, string) {
 }
 
 // determinePodStatus determines the high-level status of a pod
-func determinePodStatus(pod corev1.Pod) (PodStatus, string) {
+func determinePodStatus(pod *corev1.Pod) (PodStatus, string) {
 	// Check if pod is being deleted
 	if pod.DeletionTimestamp != nil {
 		return PodStatusTerminating, ""
@@ -206,12 +208,12 @@ func determinePodStatus(pod corev1.Pod) (PodStatus, string) {
 }
 
 // areAllContainersReady checks if all containers in a pod are ready
-func areAllContainersReady(pod corev1.Pod) bool {
+func areAllContainersReady(pod *corev1.Pod) bool {
 	if len(pod.Status.ContainerStatuses) == 0 {
 		return false
 	}
-	for _, cs := range pod.Status.ContainerStatuses {
-		if !cs.Ready {
+	for i := range pod.Status.ContainerStatuses {
+		if !pod.Status.ContainerStatuses[i].Ready {
 			return false
 		}
 	}
@@ -219,12 +221,13 @@ func areAllContainersReady(pod corev1.Pod) bool {
 }
 
 // getFailureReason extracts the reason for pod failure
-func getFailureReason(pod corev1.Pod) string {
+func getFailureReason(pod *corev1.Pod) string {
 	if pod.Status.Reason != "" {
 		return pod.Status.Reason
 	}
 	// Check container statuses for termination reason
-	for _, cs := range pod.Status.ContainerStatuses {
+	for i := range pod.Status.ContainerStatuses {
+		cs := &pod.Status.ContainerStatuses[i]
 		if cs.State.Terminated != nil && cs.State.Terminated.Reason != "" {
 			return cs.State.Terminated.Reason
 		}
@@ -233,15 +236,17 @@ func getFailureReason(pod corev1.Pod) string {
 }
 
 // getPendingReason extracts the reason why a pod is pending
-func getPendingReason(pod corev1.Pod) string {
+func getPendingReason(pod *corev1.Pod) string {
 	// Check conditions
-	for _, condition := range pod.Status.Conditions {
+	for i := range pod.Status.Conditions {
+		condition := &pod.Status.Conditions[i]
 		if condition.Type == corev1.PodScheduled && condition.Status == corev1.ConditionFalse {
 			return condition.Reason
 		}
 	}
 	// Check container waiting reasons
-	for _, cs := range pod.Status.ContainerStatuses {
+	for i := range pod.Status.ContainerStatuses {
+		cs := &pod.Status.ContainerStatuses[i]
 		if cs.State.Waiting != nil && cs.State.Waiting.Reason != "" {
 			return cs.State.Waiting.Reason
 		}
@@ -250,8 +255,9 @@ func getPendingReason(pod corev1.Pod) string {
 }
 
 // getNotReadyReason extracts the reason why containers aren't ready
-func getNotReadyReason(pod corev1.Pod) string {
-	for _, cs := range pod.Status.ContainerStatuses {
+func getNotReadyReason(pod *corev1.Pod) string {
+	for i := range pod.Status.ContainerStatuses {
+		cs := &pod.Status.ContainerStatuses[i]
 		if !cs.Ready {
 			if cs.State.Waiting != nil && cs.State.Waiting.Reason != "" {
 				return cs.State.Waiting.Reason

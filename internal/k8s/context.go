@@ -22,7 +22,7 @@ type ContextInfo struct {
 
 // ListContexts returns all available contexts from the kubeconfig
 func (c *Client) ListContexts() []ContextInfo {
-	var contexts []ContextInfo
+	contexts := make([]ContextInfo, 0, len(c.rawConfig.Contexts))
 
 	for name, ctx := range c.rawConfig.Contexts {
 		namespace := ctx.Namespace
@@ -155,7 +155,7 @@ func ListContextsFromConfig(kubeconfigPath string) ([]ContextInfo, string, error
 
 // contextsFromRawConfig extracts context info from a raw config
 func contextsFromRawConfig(config api.Config, currentContext string) []ContextInfo {
-	var contexts []ContextInfo
+	contexts := make([]ContextInfo, 0, len(config.Contexts))
 
 	for name, ctx := range config.Contexts {
 		namespace := ctx.Namespace

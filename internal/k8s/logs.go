@@ -66,7 +66,7 @@ func (c *Client) StreamLogs(ctx context.Context, opts LogOptions) (<-chan LogLin
 	// Start goroutine to read from stream and send to channel
 	go func() {
 		defer close(logChan)
-		defer stream.Close()
+		defer stream.Close() //nolint:errcheck // Cleanup code in goroutine, error cannot be usefully handled
 
 		reader := bufio.NewReader(stream)
 		for {
@@ -89,7 +89,7 @@ func (c *Client) StreamLogs(ctx context.Context, opts LogOptions) (<-chan LogLin
 				}
 
 				// Remove trailing newline
-				if len(line) > 0 && line[len(line)-1] == '\n' {
+				if line != "" && line[len(line)-1] == '\n' {
 					line = line[:len(line)-1]
 				}
 

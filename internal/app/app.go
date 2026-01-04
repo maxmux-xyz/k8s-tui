@@ -1,3 +1,5 @@
+// Package app provides the Bubble Tea application model and UI logic
+// for the Kubernetes TUI pod manager.
 package app
 
 import (
@@ -443,7 +445,8 @@ func (m Model) handlePodListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(m.pods) > 0 {
 			m.view = model.ViewLogs
 			m.selectedContainer = "" // Reset to use first container
-			return m, m.initLogStream()
+			cmd := m.initLogStream()
+			return m, cmd
 		}
 		return m, nil
 
@@ -650,7 +653,8 @@ func (m Model) viewPodList() string {
 	b.WriteString(strings.Repeat("-", 85) + "\n")
 
 	// Pod list
-	for i, pod := range m.pods {
+	for i := range m.pods {
+		pod := &m.pods[i]
 		prefix := "  "
 		if i == m.selectedPodIndex {
 			prefix = "> "
@@ -778,35 +782,42 @@ func (m Model) viewHelp() string {
 	return "Help\n\n" + m.help.View(m.keys) + "\n\nPress any key to close"
 }
 
-// Getters for testing
+// CurrentView returns the current view state (used for testing).
 func (m Model) CurrentView() model.ViewState {
 	return m.view
 }
 
+// IsReady returns whether the app has been initialized with window dimensions.
 func (m Model) IsReady() bool {
 	return m.ready
 }
 
+// ShowingHelp returns whether the help overlay is currently displayed.
 func (m Model) ShowingHelp() bool {
 	return m.showHelp
 }
 
+// Width returns the current window width.
 func (m Model) Width() int {
 	return m.width
 }
 
+// Height returns the current window height.
 func (m Model) Height() int {
 	return m.height
 }
 
+// Pods returns the current list of pods.
 func (m Model) Pods() []k8s.PodInfo {
 	return m.pods
 }
 
+// SelectedPodIndex returns the index of the currently selected pod.
 func (m Model) SelectedPodIndex() int {
 	return m.selectedPodIndex
 }
 
+// K8sError returns the most recent Kubernetes client error, if any.
 func (m Model) K8sError() error {
 	return m.k8sErr
 }
