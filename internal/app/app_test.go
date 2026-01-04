@@ -28,8 +28,9 @@ func TestInit(t *testing.T) {
 	m := New()
 	cmd := m.Init()
 
-	if cmd != nil {
-		t.Error("Init should return nil command")
+	// Init now returns a command to initialize the K8s client
+	if cmd == nil {
+		t.Error("Init should return a command to initialize K8s client")
 	}
 }
 
