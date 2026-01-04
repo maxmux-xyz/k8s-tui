@@ -14,11 +14,11 @@ import (
 type PodStatus string
 
 const (
-	PodStatusRunning    PodStatus = "Running"
-	PodStatusPending    PodStatus = "Pending"
-	PodStatusSucceeded  PodStatus = "Succeeded"
-	PodStatusFailed     PodStatus = "Failed"
-	PodStatusUnknown    PodStatus = "Unknown"
+	PodStatusRunning     PodStatus = "Running"
+	PodStatusPending     PodStatus = "Pending"
+	PodStatusSucceeded   PodStatus = "Succeeded"
+	PodStatusFailed      PodStatus = "Failed"
+	PodStatusUnknown     PodStatus = "Unknown"
 	PodStatusTerminating PodStatus = "Terminating"
 )
 
@@ -33,18 +33,18 @@ type ContainerStatus struct {
 
 // PodInfo contains information about a Kubernetes pod
 type PodInfo struct {
-	Name            string
-	Namespace       string
-	Status          PodStatus
-	StatusMessage   string // Additional status info (e.g., reason for failure)
-	Ready           string // e.g., "2/3"
-	Restarts        int32
-	Age             time.Duration
-	IP              string
-	Node            string
-	Containers      []ContainerStatus
-	ContainerCount  int
-	ReadyCount      int
+	Name           string
+	Namespace      string
+	Status         PodStatus
+	StatusMessage  string // Additional status info (e.g., reason for failure)
+	Ready          string // e.g., "2/3"
+	Restarts       int32
+	Age            time.Duration
+	IP             string
+	Node           string
+	Containers     []ContainerStatus
+	ContainerCount int
+	ReadyCount     int
 }
 
 // ListPods returns pods in the specified namespace (or current namespace if empty)

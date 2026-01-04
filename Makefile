@@ -1,4 +1,4 @@
-.PHONY: build run test test-coverage clean deps verify
+.PHONY: build run test test-coverage clean deps verify lint lint-fix
 
 # Binary name
 BINARY_NAME=k8s-tui
@@ -34,3 +34,11 @@ deps:
 # Verify dependencies
 verify:
 	go mod verify
+
+# Run linter
+lint:
+	golangci-lint run
+
+# Run linter and fix auto-fixable issues
+lint-fix:
+	golangci-lint run --fix

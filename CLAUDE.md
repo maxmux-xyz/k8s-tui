@@ -26,6 +26,8 @@ internal/
 go run .             # Run app
 go test ./...        # Run all tests
 make test            # Run tests with coverage
+make lint            # Run linters
+make lint-fix        # Run linters and auto-fix
 go build -o kpm .    # Build binary
 ```
 

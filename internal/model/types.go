@@ -4,13 +4,13 @@ package model
 type ViewState int
 
 const (
-	ViewPodList ViewState = iota // Main pod list view
-	ViewLogs                     // Log streaming view
-	ViewExec                     // Command execution view
-	ViewFiles                    // File browser view
-	ViewNamespaceSelector        // Namespace selection overlay
-	ViewContextSelector          // Context selection overlay
-	ViewHelp                     // Help overlay
+	ViewPodList           ViewState = iota // Main pod list view
+	ViewLogs                               // Log streaming view
+	ViewExec                               // Command execution view
+	ViewFiles                              // File browser view
+	ViewNamespaceSelector                  // Namespace selection overlay
+	ViewContextSelector                    // Context selection overlay
+	ViewHelp                               // Help overlay
 )
 
 // String returns a human-readable name for the view state

@@ -1,0 +1,50 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  # Start with default linters only for initial setup
+  # TODO: Enable stricter linting after fixing existing issues
+  # See docs/plans for lint-fix plan
+  default: standard
+  enable:
+    # Security
+    - gosec          # Security issues
+
+    # Style
+    - misspell       # Spelling mistakes
+
+  settings:
+    errcheck:
+      # Disable checking in defer statements for now
+      exclude-functions:
+        - io.Closer.Close
+        - (io.Closer).Close
+
+    gosec:
+      excludes:
+        - G104  # Audit errors not checked (covered by errcheck)
+
+    staticcheck:
+      checks:
+        - "all"
+        - "-SA1019"  # Temporarily ignore deprecation warnings
+        - "-ST1000"  # Package comments - enable later
+        - "-ST1020"  # Exported comment form - enable later
+
+  exclusions:
+    rules:
+      # Test files - relax some rules
+      - path: _test\.go
+        linters:
+          - gosec
+          - errcheck
+
+formatters:
+  enable:
+    - gofmt          # Formatting check
+    - goimports      # Import ordering
+
+output:
+  show-stats: true

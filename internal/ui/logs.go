@@ -41,8 +41,8 @@ type LogViewModel struct {
 	viewport viewport.Model
 
 	// Log content
-	lines       []string
-	maxLines    int
+	lines        []string
+	maxLines     int
 	contentDirty bool
 
 	// State
