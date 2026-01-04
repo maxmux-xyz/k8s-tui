@@ -15,6 +15,21 @@ import (
 	"github.com/maxime/k8s-tui/internal/ui"
 )
 
+// Log streaming message types
+type logLineMsg struct {
+	line k8s.LogLine
+}
+
+type logStreamStartedMsg struct {
+	container string
+}
+
+type logStreamErrorMsg struct {
+	err error
+}
+
+type logStreamEndedMsg struct{}
+
 // Messages for async operations
 type k8sClientReadyMsg struct {
 	client *k8s.Client
@@ -75,6 +90,13 @@ type Model struct {
 	selectedPodIndex       int
 	selectedNamespaceIndex int
 	selectedContextIndex   int
+
+	// Log streaming state
+	logView           ui.LogViewModel
+	logCancel         context.CancelFunc
+	logChan           <-chan k8s.LogLine
+	logStreamActive   bool
+	selectedContainer string
 }
 
 // New creates a new application model with default state
@@ -86,6 +108,7 @@ func New() Model {
 		help:       help.New(),
 		showHelp:   false,
 		loadingK8s: true,
+		logView:    ui.NewLogViewModel(),
 	}
 }
 
@@ -139,6 +162,99 @@ func (m Model) loadContexts() tea.Msg {
 	}
 }
 
+// logStreamChanMsg carries the log channel after stream creation
+type logStreamChanMsg struct {
+	logChan <-chan k8s.LogLine
+}
+
+// initLogStream prepares and starts log streaming for the selected pod
+func (m *Model) initLogStream() tea.Cmd {
+	if m.k8sClient == nil {
+		return func() tea.Msg {
+			return logStreamErrorMsg{err: fmt.Errorf("k8s client not initialized")}
+		}
+	}
+
+	if m.selectedPodIndex >= len(m.pods) {
+		return func() tea.Msg {
+			return logStreamErrorMsg{err: fmt.Errorf("no pod selected")}
+		}
+	}
+
+	pod := m.pods[m.selectedPodIndex]
+
+	// Stop any existing stream
+	m.stopLogStream()
+
+	// Determine container to use
+	container := m.selectedContainer
+	if container == "" && len(pod.Containers) > 0 {
+		container = pod.Containers[0].Name
+	}
+
+	// Set up log view
+	m.logView.Clear()
+	m.logView.SetPodInfo(pod.Namespace, pod.Name, container)
+	m.logView.SetState(ui.LogViewStateStreaming)
+	m.selectedContainer = container
+
+	// Create context for this stream
+	ctx, cancel := context.WithCancel(context.Background())
+	m.logCancel = cancel
+	m.logStreamActive = true
+
+	// Capture values for closure
+	namespace := pod.Namespace
+	podName := pod.Name
+	client := m.k8sClient
+
+	return func() tea.Msg {
+		opts := k8s.LogOptions{
+			Namespace: namespace,
+			Pod:       podName,
+			Container: container,
+			Follow:    true,
+			TailLines: 100, // Start with last 100 lines
+		}
+
+		logChan, err := client.StreamLogs(ctx, opts)
+		if err != nil {
+			return logStreamErrorMsg{err: err}
+		}
+
+		// Return the channel so we can store it
+		return logStreamChanMsg{logChan: logChan}
+	}
+}
+
+// waitForNextLogLine waits for the next line from an existing channel
+func waitForNextLogLine(logChan <-chan k8s.LogLine) tea.Cmd {
+	if logChan == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		line, ok := <-logChan
+		if !ok {
+			return logStreamEndedMsg{}
+		}
+		if line.Error != nil {
+			return logStreamErrorMsg{err: line.Error}
+		}
+		return logLineMsg{line: line}
+	}
+}
+
+// stopLogStream stops the current log stream
+func (m *Model) stopLogStream() {
+	if m.logCancel != nil {
+		m.logCancel()
+		m.logCancel = nil
+	}
+	m.logChan = nil
+	m.logStreamActive = false
+	m.logView.SetState(ui.LogViewStateEnded)
+}
+
 // Update implements tea.Model
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -146,6 +262,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.help.Width = msg.Width
+		m.logView.SetSize(msg.Width, msg.Height-4) // Reserve space for header/footer
 		m.ready = true
 		return m, nil
 
@@ -201,6 +318,40 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case logStreamChanMsg:
+		// Store the channel and start reading
+		m.logChan = msg.logChan
+		m.logView.SetState(ui.LogViewStateStreaming)
+		return m, waitForNextLogLine(m.logChan)
+
+	case logStreamStartedMsg:
+		m.selectedContainer = msg.container
+		m.logView.SetState(ui.LogViewStateStreaming)
+		return m, nil
+
+	case logLineMsg:
+		if msg.line.Error != nil {
+			m.logView.SetError(msg.line.Error.Error())
+			m.logStreamActive = false
+			return m, nil
+		}
+		m.logView.AddLine(msg.line.Content)
+		// Continue reading if stream is active
+		if m.logStreamActive && m.view == model.ViewLogs && m.logChan != nil {
+			return m, waitForNextLogLine(m.logChan)
+		}
+		return m, nil
+
+	case logStreamErrorMsg:
+		m.logView.SetError(msg.err.Error())
+		m.logStreamActive = false
+		return m, nil
+
+	case logStreamEndedMsg:
+		m.logView.SetState(ui.LogViewStateEnded)
+		m.logStreamActive = false
+		return m, nil
+
 	case tea.KeyMsg:
 		return m.handleKeyPress(msg)
 	}
@@ -233,6 +384,8 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch m.view {
 	case model.ViewPodList:
 		return m.handlePodListKeys(msg)
+	case model.ViewLogs:
+		return m.handleLogViewKeys(msg)
 	case model.ViewNamespaceSelector:
 		return m.handleNamespaceSelectorKeys(msg)
 	case model.ViewContextSelector:
@@ -252,6 +405,13 @@ func (m Model) handleBack() (tea.Model, tea.Cmd) {
 	if m.view.IsOverlay() {
 		m.view = m.prevView
 		m.showHelp = false
+		return m, nil
+	}
+
+	// From log view, stop streaming and go back
+	if m.view == model.ViewLogs {
+		m.stopLogStream()
+		m.view = model.ViewPodList
 		return m, nil
 	}
 
@@ -280,7 +440,11 @@ func (m Model) handlePodListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, m.keys.Logs):
-		m.view = model.ViewLogs
+		if len(m.pods) > 0 {
+			m.view = model.ViewLogs
+			m.selectedContainer = "" // Reset to use first container
+			return m, m.initLogStream()
+		}
 		return m, nil
 
 	case key.Matches(msg, m.keys.Exec):
@@ -369,6 +533,44 @@ func (m Model) handleContextSelectorKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// handleLogViewKeys handles keys specific to the log view
+func (m Model) handleLogViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "j", "down":
+		m.logView.ScrollDown(1)
+		return m, nil
+
+	case "k", "up":
+		m.logView.ScrollUp(1)
+		return m, nil
+
+	case "g":
+		m.logView.GotoTop()
+		return m, nil
+
+	case "G":
+		m.logView.GotoBottom()
+		return m, nil
+
+	case "f", "F":
+		m.logView.ToggleFollow()
+		return m, nil
+
+	case "pgdown", " ":
+		m.logView.PageDown()
+		return m, nil
+
+	case "pgup":
+		m.logView.PageUp()
+		return m, nil
+	}
+
+	// Pass to log view for viewport handling
+	var cmd tea.Cmd
+	m.logView, cmd = m.logView.Update(msg)
+	return m, cmd
 }
 
 // View implements tea.Model
@@ -471,11 +673,27 @@ func (m Model) viewPodList() string {
 }
 
 func (m Model) viewLogs() string {
-	if m.selectedPodIndex < len(m.pods) {
-		pod := m.pods[m.selectedPodIndex]
-		return fmt.Sprintf("K8s Pod Manager > Logs > %s\n\n[Log Streaming View - Coming Soon]\n\nPress 'esc' to go back", pod.Name)
+	if m.selectedPodIndex >= len(m.pods) {
+		return "K8s Pod Manager > Logs\n\n[No pod selected]\n\nPress 'esc' to go back"
 	}
-	return "K8s Pod Manager > Logs\n\n[No pod selected]\n\nPress 'esc' to go back"
+
+	var b strings.Builder
+
+	// Header with context info
+	b.WriteString("K8s Pod Manager > Logs")
+	if m.k8sClient != nil {
+		b.WriteString(fmt.Sprintf(" | Context: %s", m.k8sClient.CurrentContext()))
+	}
+	b.WriteString("\n")
+
+	// Log view content
+	b.WriteString(m.logView.View())
+
+	// Help text
+	b.WriteString("\n")
+	b.WriteString("j/k: scroll | g/G: top/bottom | f: toggle follow | esc: back")
+
+	return b.String()
 }
 
 func (m Model) viewExec() string {

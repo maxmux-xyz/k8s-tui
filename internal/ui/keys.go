@@ -19,6 +19,13 @@ type KeyMap struct {
 	Namespace key.Binding
 	Context   key.Binding
 
+	// Log view specific
+	Follow   key.Binding
+	GotoTop  key.Binding
+	GotoEnd  key.Binding
+	PageUp   key.Binding
+	PageDown key.Binding
+
 	// General
 	Help key.Binding
 	Back key.Binding
@@ -63,6 +70,26 @@ func DefaultKeyMap() KeyMap {
 		Context: key.NewBinding(
 			key.WithKeys("c"),
 			key.WithHelp("c", "context"),
+		),
+		Follow: key.NewBinding(
+			key.WithKeys("f", "F"),
+			key.WithHelp("f", "follow"),
+		),
+		GotoTop: key.NewBinding(
+			key.WithKeys("g"),
+			key.WithHelp("g", "top"),
+		),
+		GotoEnd: key.NewBinding(
+			key.WithKeys("G"),
+			key.WithHelp("G", "bottom"),
+		),
+		PageUp: key.NewBinding(
+			key.WithKeys("pgup"),
+			key.WithHelp("pgup", "page up"),
+		),
+		PageDown: key.NewBinding(
+			key.WithKeys("pgdown", " "),
+			key.WithHelp("pgdn", "page down"),
 		),
 		Help: key.NewBinding(
 			key.WithKeys("?"),

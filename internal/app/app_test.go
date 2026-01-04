@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/maxime/k8s-tui/internal/k8s"
 	"github.com/maxime/k8s-tui/internal/model"
 )
 
@@ -119,18 +120,23 @@ func TestUpdate_ViewNavigation(t *testing.T) {
 		name         string
 		key          rune
 		expectedView model.ViewState
+		needsPods    bool
 	}{
-		{"Logs", 'l', model.ViewLogs},
-		{"Exec", 'e', model.ViewExec},
-		{"Files", 'f', model.ViewFiles},
-		{"Namespace", 'n', model.ViewNamespaceSelector},
-		{"Context", 'c', model.ViewContextSelector},
+		{"Logs", 'l', model.ViewLogs, true},
+		{"Exec", 'e', model.ViewExec, false},
+		{"Files", 'f', model.ViewFiles, false},
+		{"Namespace", 'n', model.ViewNamespaceSelector, false},
+		{"Context", 'c', model.ViewContextSelector, false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := New()
-			m = makeReady(m)
+			if tt.needsPods {
+				m = makeReadyWithPods(m)
+			} else {
+				m = makeReady(m)
+			}
 
 			msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{tt.key}}
 			newModel, _ := m.Update(msg)
@@ -145,7 +151,7 @@ func TestUpdate_ViewNavigation(t *testing.T) {
 
 func TestUpdate_BackNavigation(t *testing.T) {
 	m := New()
-	m = makeReady(m)
+	m = makeReadyWithPods(m)
 
 	// Navigate to Logs view
 	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}}
@@ -268,7 +274,7 @@ func TestUpdate_BackFromPodListDoesNothing(t *testing.T) {
 
 func TestUpdate_NavigationFromDifferentViews(t *testing.T) {
 	m := New()
-	m = makeReady(m)
+	m = makeReadyWithPods(m)
 
 	// Navigate to Logs
 	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}}
@@ -304,4 +310,21 @@ func TestUpdate_ContextSelectorIsOverlay(t *testing.T) {
 func makeReady(m Model) Model {
 	newModel, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	return newModel.(Model)
+}
+
+// Helper function to make model ready with pods (for log view tests)
+func makeReadyWithPods(m Model) Model {
+	m = makeReady(m)
+	// Add a test pod so we can navigate to logs
+	m.pods = []k8s.PodInfo{
+		{
+			Name:      "test-pod",
+			Namespace: "default",
+			Status:    k8s.PodStatusRunning,
+			Containers: []k8s.ContainerStatus{
+				{Name: "main", Ready: true},
+			},
+		},
+	}
+	return m
 }
