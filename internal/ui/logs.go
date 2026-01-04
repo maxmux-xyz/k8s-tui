@@ -137,6 +137,8 @@ func (m *LogViewModel) AddLine(line string) {
 	}
 
 	m.contentDirty = true
+	// Update viewport immediately so new content is visible
+	m.updateViewportContent()
 }
 
 // AddLines adds multiple log lines
