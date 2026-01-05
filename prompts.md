@@ -4,8 +4,18 @@ Look at ./docs to see what we've done for now.
 Make a new plan to continue building our new TUI. Use ask question tool for any clarification you need
 From the plan isolate what would be a next good self contained task.
 We want to make methodical incremental progress, not so sloppy job all at once.
-Make sure to write tests in the process.
+Make sure to plan contains tests as well.
 
+Never enter plan mode.
+We are making a plan and writing it to md file - but you should not enter plan mode.
+
+Whilst making plan, you should:
+1. Thoroughly explore the codebase to understand existing patterns
+2. Identify similar features and architectural approaches
+3. Consider multiple approaches and their trade-offs
+4. Use AskUserQuestion if you need to clarify the approach
+5. Design a concrete implementation strategy
+f
 --------------------------------------------------------------------------------
 
 Look at ./docs/plans and pick up the next plan that is ready to be worked on andf has not been implemented yet.

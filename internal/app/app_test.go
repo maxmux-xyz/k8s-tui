@@ -123,7 +123,7 @@ func TestUpdate_ViewNavigation(t *testing.T) {
 		needsPods    bool
 	}{
 		{"Logs", 'l', model.ViewLogs, true},
-		{"Exec", 'e', model.ViewExec, false},
+		{"Exec", 'e', model.ViewExec, true},
 		{"Files", 'f', model.ViewFiles, false},
 		{"Namespace", 'n', model.ViewNamespaceSelector, false},
 		{"Context", 'c', model.ViewContextSelector, false},
@@ -327,4 +327,97 @@ func makeReadyWithPods(m Model) Model {
 		},
 	}
 	return m
+}
+
+func TestUpdate_ExecViewNavigation(t *testing.T) {
+	m := New()
+	m = makeReadyWithPods(m)
+
+	// Navigate to Exec view
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}}
+	newModel, _ := m.Update(msg)
+	m = newModel.(Model)
+
+	if m.CurrentView() != model.ViewExec {
+		t.Errorf("Should be in Exec view, got %v", m.CurrentView())
+	}
+}
+
+func TestUpdate_ExecViewRequiresPods(t *testing.T) {
+	m := New()
+	m = makeReady(m)
+	// No pods added
+
+	// Try to navigate to Exec view
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}}
+	newModel, _ := m.Update(msg)
+	m = newModel.(Model)
+
+	// Should stay in PodList since there are no pods
+	if m.CurrentView() != model.ViewPodList {
+		t.Errorf("Should stay in PodList view when no pods, got %v", m.CurrentView())
+	}
+}
+
+func TestUpdate_ExecViewBackNavigation(t *testing.T) {
+	m := New()
+	m = makeReadyWithPods(m)
+
+	// Navigate to Exec view
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}}
+	newModel, _ := m.Update(msg)
+	m = newModel.(Model)
+
+	if m.CurrentView() != model.ViewExec {
+		t.Fatalf("Should be in Exec view, got %v", m.CurrentView())
+	}
+
+	// Press Escape to go back
+	escMsg := tea.KeyMsg{Type: tea.KeyEsc}
+	newModel, _ = m.Update(escMsg)
+	m = newModel.(Model)
+
+	if m.CurrentView() != model.ViewPodList {
+		t.Errorf("Should be back in PodList view, got %v", m.CurrentView())
+	}
+}
+
+func TestUpdate_ExecViewInitialization(t *testing.T) {
+	m := New()
+	m = makeReadyWithPods(m)
+
+	// Navigate to Exec view
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}}
+	newModel, _ := m.Update(msg)
+	m = newModel.(Model)
+
+	// The exec view should be initialized
+	if m.CurrentView() != model.ViewExec {
+		t.Errorf("Should be in Exec view, got %v", m.CurrentView())
+	}
+
+	// Verify the view can be rendered
+	view := m.View()
+	if view == "" {
+		t.Error("View should not be empty")
+	}
+
+	// Should contain exec-related content
+	if !containsString(view, "Exec") {
+		t.Error("View should contain 'Exec'")
+	}
+}
+
+// Helper function to check if string contains substring
+func containsString(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsSubstring(s, substr))
+}
+
+func containsSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }

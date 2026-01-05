@@ -32,6 +32,11 @@ type logStreamErrorMsg struct {
 
 type logStreamEndedMsg struct{}
 
+// Exec message types
+type execResultMsg struct {
+	result k8s.ExecResult
+}
+
 // Messages for async operations
 type k8sClientReadyMsg struct {
 	client *k8s.Client
@@ -99,6 +104,11 @@ type Model struct {
 	logChan           <-chan k8s.LogLine
 	logStreamActive   bool
 	selectedContainer string
+
+	// Exec state
+	execView    ui.ExecViewModel
+	execCancel  context.CancelFunc
+	execRunning bool
 }
 
 // New creates a new application model with default state
@@ -111,6 +121,7 @@ func New() Model {
 		showHelp:   false,
 		loadingK8s: true,
 		logView:    ui.NewLogViewModel(),
+		execView:   ui.NewExecViewModel(),
 	}
 }
 
@@ -265,6 +276,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.help.Width = msg.Width
 		m.logView.SetSize(msg.Width, msg.Height-4) // Reserve space for header/footer
+		m.execView.SetSize(msg.Width, msg.Height-4)
 		m.ready = true
 		return m, nil
 
@@ -354,6 +366,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.logStreamActive = false
 		return m, nil
 
+	case execResultMsg:
+		m.execRunning = false
+		if msg.result.Error != nil {
+			m.execView.SetError(msg.result.Error.Error())
+			m.execView.AddOutput(msg.result.Stderr, true)
+		} else {
+			m.execView.SetState(ui.ExecViewStateComplete)
+			if msg.result.Stdout != "" {
+				m.execView.AddOutput(msg.result.Stdout, false)
+			}
+			if msg.result.Stderr != "" {
+				m.execView.AddOutput(msg.result.Stderr, true)
+			}
+		}
+		m.execView.Focus()
+		return m, nil
+
 	case tea.KeyMsg:
 		return m.handleKeyPress(msg)
 	}
@@ -388,6 +417,8 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handlePodListKeys(msg)
 	case model.ViewLogs:
 		return m.handleLogViewKeys(msg)
+	case model.ViewExec:
+		return m.handleExecViewKeys(msg)
 	case model.ViewNamespaceSelector:
 		return m.handleNamespaceSelectorKeys(msg)
 	case model.ViewContextSelector:
@@ -413,6 +444,13 @@ func (m Model) handleBack() (tea.Model, tea.Cmd) {
 	// From log view, stop streaming and go back
 	if m.view == model.ViewLogs {
 		m.stopLogStream()
+		m.view = model.ViewPodList
+		return m, nil
+	}
+
+	// From exec view, stop any running command and go back
+	if m.view == model.ViewExec {
+		m.stopExec()
 		m.view = model.ViewPodList
 		return m, nil
 	}
@@ -451,7 +489,17 @@ func (m Model) handlePodListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, m.keys.Exec):
-		m.view = model.ViewExec
+		if len(m.pods) > 0 {
+			m.view = model.ViewExec
+			pod := m.pods[m.selectedPodIndex]
+			container := ""
+			if len(pod.Containers) > 0 {
+				container = pod.Containers[0].Name
+			}
+			m.execView.SetPodInfo(pod.Namespace, pod.Name, container)
+			m.execView.SetState(ui.ExecViewStateIdle)
+			m.execView.Focus()
+		}
 		return m, nil
 
 	case key.Matches(msg, m.keys.Files):
@@ -574,6 +622,90 @@ func (m Model) handleLogViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.logView, cmd = m.logView.Update(msg)
 	return m, cmd
+}
+
+// handleExecViewKeys handles keys specific to the exec view
+func (m Model) handleExecViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Don't process keys while command is running (except for cancel)
+	if m.execRunning {
+		return m, nil
+	}
+
+	switch msg.Type {
+	case tea.KeyEnter:
+		// Execute the command
+		cmd := m.execView.GetCommand()
+		if cmd != "" {
+			return m.runExecCommand(cmd)
+		}
+		return m, nil
+	}
+
+	// Pass to exec view for input handling
+	var viewCmd tea.Cmd
+	m.execView, viewCmd = m.execView.Update(msg)
+	return m, viewCmd
+}
+
+// runExecCommand starts executing a command in the pod
+func (m Model) runExecCommand(command string) (tea.Model, tea.Cmd) {
+	if m.k8sClient == nil {
+		m.execView.SetError("k8s client not initialized")
+		return m, nil
+	}
+
+	if m.selectedPodIndex >= len(m.pods) {
+		m.execView.SetError("no pod selected")
+		return m, nil
+	}
+
+	pod := m.pods[m.selectedPodIndex]
+	container := ""
+	if len(pod.Containers) > 0 {
+		container = pod.Containers[0].Name
+	}
+
+	// Parse command
+	args := k8s.ParseCommand(command)
+	if len(args) == 0 {
+		return m, nil
+	}
+
+	// Add to history and show marker
+	m.execView.AddToHistory(command)
+	m.execView.AddCommandMarker(command)
+	m.execView.ClearInput()
+	m.execView.SetState(ui.ExecViewStateRunning)
+	m.execRunning = true
+
+	// Create context for this exec
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	m.execCancel = cancel
+
+	// Capture values for closure
+	client := m.k8sClient
+	opts := k8s.ExecOptions{
+		Namespace: pod.Namespace,
+		Pod:       pod.Name,
+		Container: container,
+		Command:   args,
+	}
+
+	cmd := func() tea.Msg {
+		result := client.Exec(ctx, opts)
+		return execResultMsg{result: result}
+	}
+
+	return m, cmd
+}
+
+// stopExec cancels the current exec operation
+func (m *Model) stopExec() {
+	if m.execCancel != nil {
+		m.execCancel()
+		m.execCancel = nil
+	}
+	m.execRunning = false
 }
 
 // View implements tea.Model
@@ -701,11 +833,27 @@ func (m Model) viewLogs() string {
 }
 
 func (m Model) viewExec() string {
-	if m.selectedPodIndex < len(m.pods) {
-		pod := m.pods[m.selectedPodIndex]
-		return fmt.Sprintf("K8s Pod Manager > Exec > %s\n\n[Command Execution View - Coming Soon]\n\nPress 'esc' to go back", pod.Name)
+	if m.selectedPodIndex >= len(m.pods) {
+		return "K8s Pod Manager > Exec\n\n[No pod selected]\n\nPress 'esc' to go back"
 	}
-	return "K8s Pod Manager > Exec\n\n[No pod selected]\n\nPress 'esc' to go back"
+
+	var b strings.Builder
+
+	// Header with context info
+	b.WriteString("K8s Pod Manager > Exec")
+	if m.k8sClient != nil {
+		b.WriteString(fmt.Sprintf(" | Context: %s", m.k8sClient.CurrentContext()))
+	}
+	b.WriteString("\n")
+
+	// Exec view content
+	b.WriteString(m.execView.View())
+
+	// Help text
+	b.WriteString("\n")
+	b.WriteString("Enter: run command | Up/Down: history | Tab: switch focus | esc: back")
+
+	return b.String()
 }
 
 func (m Model) viewFiles() string {
