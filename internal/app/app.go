@@ -37,6 +37,19 @@ type execResultMsg struct {
 	result k8s.ExecResult
 }
 
+// File browser message types
+type dirLoadedMsg struct {
+	entries []k8s.FileInfo
+	path    string
+	err     error
+}
+
+type fileContentMsg struct {
+	content  string
+	filename string
+	err      error
+}
+
 // Messages for async operations
 type k8sClientReadyMsg struct {
 	client *k8s.Client
@@ -109,6 +122,10 @@ type Model struct {
 	execView    ui.ExecViewModel
 	execCancel  context.CancelFunc
 	execRunning bool
+
+	// File browser state
+	filesView   ui.FileBrowserModel
+	filesCancel context.CancelFunc
 }
 
 // New creates a new application model with default state
@@ -122,6 +139,7 @@ func New() Model {
 		loadingK8s: true,
 		logView:    ui.NewLogViewModel(),
 		execView:   ui.NewExecViewModel(),
+		filesView:  ui.NewFileBrowserModel(),
 	}
 }
 
@@ -277,6 +295,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.help.Width = msg.Width
 		m.logView.SetSize(msg.Width, msg.Height-4) // Reserve space for header/footer
 		m.execView.SetSize(msg.Width, msg.Height-4)
+		m.filesView.SetSize(msg.Width, msg.Height-4)
 		m.ready = true
 		return m, nil
 
@@ -383,6 +402,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.execView.Focus()
 		return m, nil
 
+	case dirLoadedMsg:
+		if msg.err != nil {
+			m.filesView.SetError(msg.err.Error())
+			return m, nil
+		}
+		m.filesView.SetCurrentPath(msg.path)
+		m.filesView.SetEntries(msg.entries)
+		return m, nil
+
+	case fileContentMsg:
+		if msg.err != nil {
+			m.filesView.SetError(msg.err.Error())
+			return m, nil
+		}
+		m.filesView.SetFileContent(msg.filename, msg.content)
+		return m, nil
+
 	case tea.KeyMsg:
 		return m.handleKeyPress(msg)
 	}
@@ -419,6 +455,8 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleLogViewKeys(msg)
 	case model.ViewExec:
 		return m.handleExecViewKeys(msg)
+	case model.ViewFiles:
+		return m.handleFilesViewKeys(msg)
 	case model.ViewNamespaceSelector:
 		return m.handleNamespaceSelectorKeys(msg)
 	case model.ViewContextSelector:
@@ -451,6 +489,19 @@ func (m Model) handleBack() (tea.Model, tea.Cmd) {
 	// From exec view, stop any running command and go back
 	if m.view == model.ViewExec {
 		m.stopExec()
+		m.view = model.ViewPodList
+		return m, nil
+	}
+
+	// From files view, handle differently based on state
+	if m.view == model.ViewFiles {
+		// If viewing a file, go back to directory listing
+		if m.filesView.IsViewingFile() {
+			m.filesView.ExitFileView()
+			return m, nil
+		}
+		// Otherwise go back to pod list
+		m.stopFileBrowser()
 		m.view = model.ViewPodList
 		return m, nil
 	}
@@ -503,7 +554,18 @@ func (m Model) handlePodListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, m.keys.Files):
-		m.view = model.ViewFiles
+		if len(m.pods) > 0 {
+			m.view = model.ViewFiles
+			pod := m.pods[m.selectedPodIndex]
+			container := ""
+			if len(pod.Containers) > 0 {
+				container = pod.Containers[0].Name
+			}
+			m.filesView.Clear()
+			m.filesView.SetPodInfo(pod.Namespace, pod.Name, container)
+			m.filesView.SetState(ui.FileBrowserStateLoading)
+			return m, m.loadDirectory("/")
+		}
 		return m, nil
 
 	case key.Matches(msg, m.keys.Namespace):
@@ -708,6 +770,132 @@ func (m *Model) stopExec() {
 	m.execRunning = false
 }
 
+// loadDirectory loads directory contents for the file browser
+func (m Model) loadDirectory(path string) tea.Cmd {
+	if m.k8sClient == nil {
+		return func() tea.Msg {
+			return dirLoadedMsg{err: fmt.Errorf("k8s client not initialized")}
+		}
+	}
+
+	if m.selectedPodIndex >= len(m.pods) {
+		return func() tea.Msg {
+			return dirLoadedMsg{err: fmt.Errorf("no pod selected")}
+		}
+	}
+
+	pod := m.pods[m.selectedPodIndex]
+	container := ""
+	if len(pod.Containers) > 0 {
+		container = pod.Containers[0].Name
+	}
+
+	client := m.k8sClient
+	namespace := pod.Namespace
+	podName := pod.Name
+
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		opts := k8s.FileOptions{
+			Namespace: namespace,
+			Pod:       podName,
+			Container: container,
+			Path:      path,
+		}
+
+		entries, err := client.ListDir(ctx, opts)
+		return dirLoadedMsg{entries: entries, path: path, err: err}
+	}
+}
+
+// loadFileContent loads file contents for preview
+func (m Model) loadFileContent(path, filename string) tea.Cmd {
+	if m.k8sClient == nil {
+		return func() tea.Msg {
+			return fileContentMsg{err: fmt.Errorf("k8s client not initialized")}
+		}
+	}
+
+	if m.selectedPodIndex >= len(m.pods) {
+		return func() tea.Msg {
+			return fileContentMsg{err: fmt.Errorf("no pod selected")}
+		}
+	}
+
+	pod := m.pods[m.selectedPodIndex]
+	container := ""
+	if len(pod.Containers) > 0 {
+		container = pod.Containers[0].Name
+	}
+
+	client := m.k8sClient
+	namespace := pod.Namespace
+	podName := pod.Name
+
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		opts := k8s.FileOptions{
+			Namespace: namespace,
+			Pod:       podName,
+			Container: container,
+			Path:      path,
+		}
+
+		content, err := client.ReadFile(ctx, opts, ui.MaxFilePreviewBytes())
+		return fileContentMsg{content: content, filename: filename, err: err}
+	}
+}
+
+// handleFilesViewKeys handles keys specific to the files view
+func (m Model) handleFilesViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Handle backspace for parent directory navigation (when not viewing a file)
+	if msg.Type == tea.KeyBackspace && !m.filesView.IsViewingFile() {
+		// If viewing a file, backspace is handled by handleBack
+		parent := m.filesView.NavigateToParent()
+		if parent != "" {
+			m.filesView.SetState(ui.FileBrowserStateLoading)
+			return m, m.loadDirectory(parent)
+		}
+		return m, nil
+	}
+
+	// Handle Enter for navigation/file viewing
+	if msg.Type == tea.KeyEnter && !m.filesView.IsViewingFile() {
+		path, isFile := m.filesView.NavigateToEntry()
+		if path == "" {
+			return m, nil
+		}
+
+		if isFile {
+			// Load file content
+			entry := m.filesView.SelectedEntry()
+			m.filesView.SetState(ui.FileBrowserStateLoading)
+			return m, m.loadFileContent(path, entry.Name)
+		}
+		// Load directory
+		m.filesView.SetState(ui.FileBrowserStateLoading)
+		return m, m.loadDirectory(path)
+	}
+
+	// Pass to files view for navigation handling
+	var viewCmd tea.Cmd
+	m.filesView, viewCmd = m.filesView.Update(msg)
+	return m, viewCmd
+}
+
+// stopFileBrowser cleans up file browser state
+func (m *Model) stopFileBrowser() {
+	if m.filesCancel != nil {
+		m.filesCancel()
+		m.filesCancel = nil
+	}
+	m.filesView.Clear()
+}
+
 // View implements tea.Model
 func (m Model) View() string {
 	if !m.ready {
@@ -857,11 +1045,23 @@ func (m Model) viewExec() string {
 }
 
 func (m Model) viewFiles() string {
-	if m.selectedPodIndex < len(m.pods) {
-		pod := m.pods[m.selectedPodIndex]
-		return fmt.Sprintf("K8s Pod Manager > Files > %s\n\n[File Browser View - Coming Soon]\n\nPress 'esc' to go back", pod.Name)
+	if m.selectedPodIndex >= len(m.pods) {
+		return "K8s Pod Manager > Files\n\n[No pod selected]\n\nPress 'esc' to go back"
 	}
-	return "K8s Pod Manager > Files\n\n[No pod selected]\n\nPress 'esc' to go back"
+
+	var b strings.Builder
+
+	// Header with context info
+	b.WriteString("K8s Pod Manager > Files")
+	if m.k8sClient != nil {
+		b.WriteString(fmt.Sprintf(" | Context: %s", m.k8sClient.CurrentContext()))
+	}
+	b.WriteString("\n")
+
+	// File browser content
+	b.WriteString(m.filesView.View())
+
+	return b.String()
 }
 
 func (m Model) viewNamespaceSelector() string {

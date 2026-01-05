@@ -15,13 +15,16 @@ Whilst making plan, you should:
 3. Consider multiple approaches and their trade-offs
 4. Use AskUserQuestion if you need to clarify the approach
 5. Design a concrete implementation strategy
-f
+
 --------------------------------------------------------------------------------
 
 Look at ./docs/plans and pick up the next plan that is ready to be worked on andf has not been implemented yet.
-Implement the plan.  Use ask question tool for any clarification you need.
+Implement the plan. Use ask question tool for any clarification you need.
+If the plan contains multiple steps, implement them one by one. When done, write to the plan file the step you've implemented.
+
 When done, write implementation notes to docs/implemented.
-And append "done" to the plan file name.
+And append "done" to the plan file name (if full plan is done).
+If plan contains multiple steps, and we are not done with all of them, write "in progress" to the plan file name.
 
 Then commit the changes to the repository.
 `git add . && git commit -m "Implement plan X"`

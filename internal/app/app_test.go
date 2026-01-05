@@ -124,7 +124,7 @@ func TestUpdate_ViewNavigation(t *testing.T) {
 	}{
 		{"Logs", 'l', model.ViewLogs, true},
 		{"Exec", 'e', model.ViewExec, true},
-		{"Files", 'f', model.ViewFiles, false},
+		{"Files", 'f', model.ViewFiles, true},
 		{"Namespace", 'n', model.ViewNamespaceSelector, false},
 		{"Context", 'c', model.ViewContextSelector, false},
 	}
@@ -420,4 +420,83 @@ func containsSubstring(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+func TestUpdate_FilesViewNavigation(t *testing.T) {
+	m := New()
+	m = makeReadyWithPods(m)
+
+	// Navigate to Files view
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}}
+	newModel, _ := m.Update(msg)
+	m = newModel.(Model)
+
+	if m.CurrentView() != model.ViewFiles {
+		t.Errorf("Should be in Files view, got %v", m.CurrentView())
+	}
+}
+
+func TestUpdate_FilesViewRequiresPods(t *testing.T) {
+	m := New()
+	m = makeReady(m)
+	// No pods added
+
+	// Try to navigate to Files view
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}}
+	newModel, _ := m.Update(msg)
+	m = newModel.(Model)
+
+	// Should stay in PodList since there are no pods
+	if m.CurrentView() != model.ViewPodList {
+		t.Errorf("Should stay in PodList view when no pods, got %v", m.CurrentView())
+	}
+}
+
+func TestUpdate_FilesViewBackNavigation(t *testing.T) {
+	m := New()
+	m = makeReadyWithPods(m)
+
+	// Navigate to Files view
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}}
+	newModel, _ := m.Update(msg)
+	m = newModel.(Model)
+
+	if m.CurrentView() != model.ViewFiles {
+		t.Fatalf("Should be in Files view, got %v", m.CurrentView())
+	}
+
+	// Press Escape to go back
+	escMsg := tea.KeyMsg{Type: tea.KeyEsc}
+	newModel, _ = m.Update(escMsg)
+	m = newModel.(Model)
+
+	if m.CurrentView() != model.ViewPodList {
+		t.Errorf("Should be back in PodList view, got %v", m.CurrentView())
+	}
+}
+
+func TestUpdate_FilesViewInitialization(t *testing.T) {
+	m := New()
+	m = makeReadyWithPods(m)
+
+	// Navigate to Files view
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}}
+	newModel, _ := m.Update(msg)
+	m = newModel.(Model)
+
+	// The files view should be initialized
+	if m.CurrentView() != model.ViewFiles {
+		t.Errorf("Should be in Files view, got %v", m.CurrentView())
+	}
+
+	// Verify the view can be rendered
+	view := m.View()
+	if view == "" {
+		t.Error("View should not be empty")
+	}
+
+	// Should contain files-related content
+	if !containsString(view, "Files") {
+		t.Error("View should contain 'Files'")
+	}
 }
