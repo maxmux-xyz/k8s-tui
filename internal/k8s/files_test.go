@@ -311,6 +311,64 @@ func TestParentPath(t *testing.T) {
 	}
 }
 
+func TestParseLsLineWithSELinuxDot(t *testing.T) {
+	// Test parsing permissions with SELinux dot suffix (e.g., drwxr-xr-x.)
+	tests := []struct {
+		name string
+		line string
+		want FileInfo
+	}{
+		{
+			name: "directory with SELinux dot",
+			line: "drwxr-xr-x.  1 app  app      46 Jan  6 00:36 .",
+			want: FileInfo{
+				Name:        ".",
+				IsDir:       true,
+				Permissions: "drwxr-xr-x.",
+				Owner:       "app",
+				Group:       "app",
+				Size:        46,
+			},
+		},
+		{
+			name: "file with SELinux dot",
+			line: "-rw-r--r--. 1 root root 1234 Jan  1 12:00 config.yaml",
+			want: FileInfo{
+				Name:        "config.yaml",
+				IsDir:       false,
+				Permissions: "-rw-r--r--.",
+				Owner:       "root",
+				Group:       "root",
+				Size:        1234,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseLsLine(tt.line)
+			if err != nil {
+				t.Fatalf("parseLsLine() error = %v", err)
+			}
+			if got.Name != tt.want.Name {
+				t.Errorf("Name = %q, want %q", got.Name, tt.want.Name)
+			}
+			if got.IsDir != tt.want.IsDir {
+				t.Errorf("IsDir = %v, want %v", got.IsDir, tt.want.IsDir)
+			}
+			if got.Permissions != tt.want.Permissions {
+				t.Errorf("Permissions = %q, want %q", got.Permissions, tt.want.Permissions)
+			}
+			if got.Owner != tt.want.Owner {
+				t.Errorf("Owner = %q, want %q", got.Owner, tt.want.Owner)
+			}
+			if got.Size != tt.want.Size {
+				t.Errorf("Size = %d, want %d", got.Size, tt.want.Size)
+			}
+		})
+	}
+}
+
 func TestFileInfoSymlink(t *testing.T) {
 	// Test parsing symlink with arrow
 	line := "lrwxrwxrwx 1 root root 15 Jan  1 12:00 current -> /app/v1.2.3"

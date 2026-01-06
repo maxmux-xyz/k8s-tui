@@ -186,9 +186,11 @@ func ParseLsOutput(output string) ([]FileInfo, error) {
 // Format: -rw-r--r-- 1 root root 1234 Jan  1 12:00 filename
 // Or with symlink: lrwxrwxrwx 1 root root 10 Jan  1 12:00 link -> target
 func parseLsLine(line string) (FileInfo, error) {
-	// Use regex to handle variable whitespace
-	// Permissions, links, owner, group, size, month, day, time/year, name
-	pattern := `^([drwxlst-]{10})\s+(\d+)\s+(\S+)\s+(\S+)\s+(\d+)\s+(\w+)\s+(\d+)\s+([\d:]+)\s+(.+)$`
+	// Use regex to handle variable whitespace and different ls formats
+	// Permissions can include extra chars like @ . + for extended attributes
+	// Date/time field can be "HH:MM" or "YYYY" depending on age
+	// BusyBox ls may have different spacing
+	pattern := `^([drwxlstST@.+-]{10,11})\s+(\d+)\s+(\S+)\s+(\S+)\s+(\d+)\s+(\w+)\s+(\d+)\s+(\S+)\s+(.+)$`
 	re := regexp.MustCompile(pattern)
 
 	matches := re.FindStringSubmatch(line)
